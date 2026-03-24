@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRT + Order Flow + SMC Forex Strategy</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+Bengali:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050b14;
+    --panel: #0a1628;
+    --border: #1a2d4a;
+    --accent: #00e5ff;
+    --gold: #f0b429;
+    --green: #00c896;
+    --red: #ff4d6a;
+    --purple: #a259ff;
+    --text: #c8d8f0;
+    --dim: #4a6080;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans Bengali', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Glow orbs */
+  body::after {
+    content: '';
+    position: fixed;
+    width: 600px; height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,229,255,0.06) 0%, transparent 70%);
+    top: -200px; left: -200px;
+    pointer-events: none;
+    z-index: 0;
+    animation: orb 8s ease-in-out infinite alternate;
+  }
+
+  @keyframes orb {
+    to { transform: translate(200px, 300px); }
+  }
+
+  .container { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 20px 60px; }
+
+  /* ====== HEADER ====== */
+  header {
+    text-align: center;
+    padding: 50px 0 30px;
+    position: relative;
+  }
+
+  .header-badge {
+    display: inline-block;
+    background: rgba(0,229,255,0.08);
+    border: 1px solid rgba(0,229,255,0.3);
+    color: var(--accent);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    padding: 6px 18px;
+    border-radius: 2px;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+    animation: fadeIn 0.6s ease;
+  }
+
+  h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(42px, 8vw, 80px);
+    line-height: 0.95;
+    letter-spacing: 2px;
+    background: linear-gradient(135deg, #ffffff 30%, var(--accent) 70%, var(--gold) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 16px;
+    animation: fadeIn 0.8s ease 0.1s both;
+  }
+
+  .subtitle {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--dim);
+    letter-spacing: 1px;
+    animation: fadeIn 0.8s ease 0.2s both;
+  }
+
+  .divider {
+    width: 120px; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    margin: 24px auto;
+  }
+
+  /* ====== TABS ====== */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin: 30px 0 24px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px;
+    animation: fadeIn 0.8s ease 0.3s both;
+  }
+
+  .tab {
+    flex: 1;
+    padding: 12px 8px;
+    text-align: center;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--dim);
+    transition: all 0.25s;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.5px;
+  }
+
+  .tab:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+
+  .tab.active {
+    background: linear-gradient(135deg, rgba(0,229,255,0.15), rgba(0,229,255,0.05));
+    color: var(--accent);
+    border: 1px solid rgba(0,229,255,0.3);
+  }
+
+  /* ====== PANELS ====== */
+  .panel {
+    display: none;
+    animation: slideUp 0.4s ease;
+  }
+  .panel.active { display: block; }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* ====== SECTION CARDS ====== */
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 28px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+
+  .card:hover { border-color: rgba(0,229,255,0.25); }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--purple), var(--gold));
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .card:hover::before { opacity: 1; }
+
+  .card-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .card-title .icon { font-size: 20px; }
+
+  .card-subtitle {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  /* ====== STEPS ====== */
+  .steps { display: flex; flex-direction: column; gap: 14px; }
+
+  .step {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    padding: 16px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    transition: all 0.25s;
+    cursor: default;
+  }
+
+  .step:hover {
+    background: rgba(0,229,255,0.04);
+    border-color: rgba(0,229,255,0.2);
+    transform: translateX(4px);
+  }
+
+  .step-num {
+    min-width: 32px; height: 32px;
+    background: linear-gradient(135deg, rgba(0,229,255,0.2), rgba(0,229,255,0.05));
+    border: 1px solid rgba(0,229,255,0.4);
+    border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px; font-weight: 600;
+    color: var(--accent);
+  }
+
+  .step-content h4 {
+    font-size: 15px;
+    font-weight: 700;
+    color: #e0eeff;
+    margin-bottom: 5px;
+  }
+
+  .step-content p {
+    font-size: 13.5px;
+    color: var(--text);
+    line-height: 1.7;
+  }
+
+  /* ====== TAGS ====== */
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+  .tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 2px;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+
+  .tag-green { background: rgba(0,200,150,0.12); color: var(--green); border: 1px solid rgba(0,200,150,0.3); }
+  .tag-red { background: rgba(255,77,106,0.12); color: var(--red); border: 1px solid rgba(255,77,106,0.3); }
+  .tag-gold { background: rgba(240,180,41,0.12); color: var(--gold); border: 1px solid rgba(240,180,41,0.3); }
+  .tag-blue { background: rgba(0,229,255,0.1); color: var(--accent); border: 1px solid rgba(0,229,255,0.3); }
+  .tag-purple { background: rgba(162,89,255,0.12); color: var(--purple); border: 1px solid rgba(162,89,255,0.3); }
+
+  /* ====== GRID ====== */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+
+  @media (max-width: 680px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+
+  /* ====== MINI CARDS ====== */
+  .mini-card {
+    background: rgba(255,255,255,0.025);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 18px;
+    transition: all 0.25s;
+  }
+
+  .mini-card:hover {
+    border-color: var(--accent);
+    background: rgba(0,229,255,0.04);
+  }
+
+  .mini-card h4 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--gold);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .mini-card p { font-size: 13.5px; line-height: 1.6; }
+
+  /* ====== RULE LIST ====== */
+  .rule-list { list-style: none; }
+  .rule-list li {
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 14px;
+    line-height: 1.6;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .rule-list li::before {
+    content: '▸';
+    color: var(--accent);
+    font-size: 12px;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+  .rule-list li:last-child { border-bottom: none; }
+
+  /* ====== CANDLE CHART (Visual) ====== */
+  .chart-container {
+    background: #060d1a;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    margin: 16px 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .chart-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+  }
+
+  svg.chart { width: 100%; height: 180px; }
+
+  /* ====== SIGNAL TABLE ====== */
+  .signal-table { width: 100%; border-collapse: collapse; }
+
+  .signal-table th {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .signal-table td {
+    padding: 12px 12px;
+    font-size: 13.5px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    vertical-align: top;
+  }
+
+  .signal-table tr:last-child td { border-bottom: none; }
+  .signal-table tr:hover td { background: rgba(0,229,255,0.03); }
+
+  /* ====== INDICATOR BARS ====== */
+  .indicator-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .indicator-bar:last-child { border-bottom: none; }
+
+  .indicator-name {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text);
+    min-width: 160px;
+  }
+
+  .bar-track {
+    flex: 1;
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 1.2s cubic-bezier(0.34,1.56,0.64,1);
+  }
+
+  .bar-value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    min-width: 40px;
+    text-align: right;
+  }
+
+  /* ====== RISK BOX ====== */
+  .risk-box {
+    background: linear-gradient(135deg, rgba(255,77,106,0.08), rgba(255,77,106,0.02));
+    border: 1px solid rgba(255,77,106,0.25);
+    border-radius: 4px;
+    padding: 20px;
+    margin-top: 16px;
+  }
+
+  .risk-box h4 {
+    color: var(--red);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+  }
+
+  /* ====== CHECKLIST ====== */
+  .checklist { display: flex; flex-direction: column; gap: 10px; }
+
+  .check-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+  }
+
+  .check-item:hover { background: rgba(0,229,255,0.04); border-color: rgba(0,229,255,0.2); }
+  .check-item.checked { border-color: rgba(0,200,150,0.4); background: rgba(0,200,150,0.06); }
+
+  .check-box {
+    width: 20px; height: 20px;
+    border: 2px solid var(--dim);
+    border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    font-size: 12px;
+  }
+
+  .check-item.checked .check-box { border-color: var(--green); background: var(--green); color: #000; }
+
+  .check-text { font-size: 14px; }
+
+  /* ====== PROGRESS ====== */
+  .progress-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 20px 0 8px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green), var(--accent));
+    border-radius: 2px;
+    transition: width 0.4s ease;
+    width: 0%;
+  }
+
+  .progress-text {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--dim);
+    text-align: right;
+  }
+
+  /* ====== HIGHLIGHT BOX ====== */
+  .highlight {
+    background: linear-gradient(135deg, rgba(240,180,41,0.08), rgba(240,180,41,0.02));
+    border: 1px solid rgba(240,180,41,0.25);
+    border-left: 3px solid var(--gold);
+    border-radius: 0 4px 4px 0;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .hl-blue {
+    background: linear-gradient(135deg, rgba(0,229,255,0.06), rgba(0,229,255,0.01));
+    border: 1px solid rgba(0,229,255,0.2);
+    border-left: 3px solid var(--accent);
+  }
+
+  .hl-purple {
+    background: linear-gradient(135deg, rgba(162,89,255,0.08), rgba(162,89,255,0.01));
+    border: 1px solid rgba(162,89,255,0.2);
+    border-left: 3px solid var(--purple);
+  }
+
+  /* Phase indicator */
+  .phase-row {
+    display: flex;
+    gap: 0;
+    margin: 20px 0;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .phase {
+    flex: 1;
+    padding: 14px 8px;
+    text-align: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    position: relative;
+  }
+
+  .phase::after {
+    content: '▶';
+    position: absolute;
+    right: -8px; top: 50%; transform: translateY(-50%);
+    font-size: 12px;
+    z-index: 1;
+  }
+  .phase:last-child::after { display: none; }
+
+  .phase-1 { background: rgba(162,89,255,0.15); color: var(--purple); }
+  .phase-2 { background: rgba(0,229,255,0.12); color: var(--accent); }
+  .phase-3 { background: rgba(240,180,41,0.12); color: var(--gold); }
+  .phase-4 { background: rgba(0,200,150,0.12); color: var(--green); }
+
+  strong { color: #e0eeff; }
+  em { color: var(--gold); font-style: normal; }
+
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <header>
+    <div class="header-badge">⚡ PROFESSIONAL FOREX SYSTEM v2.0</div>
+    <h1>CRT + ORDER FLOW<br>+ SMC STRATEGY</h1>
+    <p class="subtitle">CANDLE RANGE THEORY · SMART MONEY CONCEPT · INSTITUTIONAL ORDER FLOW</p>
+    <div class="divider"></div>
+  </header>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('overview')">📊 Overview</div>
+    <div class="tab" onclick="showTab('crt')">🕯️ CRT</div>
+    <div class="tab" onclick="showTab('smc')">🏦 SMC</div>
+    <div class="tab" onclick="showTab('orderflow')">📈 Order Flow</div>
+    <div class="tab" onclick="showTab('entry')">🎯 Entry Rules</div>
+    <div class="tab" onclick="showTab('checklist')">✅ Checklist</div>
+  </div>
+
+  <!-- ===== PANEL 1: OVERVIEW ===== -->
+  <div id="overview" class="panel active">
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🗺️</span> Strategy Blueprint</div>
+      <div class="card-subtitle">EXECUTION FRAMEWORK · MULTI-TIMEFRAME</div>
+
+      <div class="phase-row">
+        <div class="phase phase-1">HTF Analysis<br><small style="opacity:0.7">W/D/4H</small></div>
+        <div class="phase phase-2">CRT Setup<br><small style="opacity:0.7">4H/1H</small></div>
+        <div class="phase phase-3">SMC Confirm<br><small style="opacity:0.7">15M/5M</small></div>
+        <div class="phase phase-4">Execute<br><small style="opacity:0.7">Entry/SL/TP</small></div>
+      </div>
+
+      <div class="highlight hl-blue">
+        এই strategy-তে তিনটি শক্তিশালী concept একসাথে কাজ করে — <strong>CRT</strong> দিয়ে candlestick-এর manipulation zone চিহ্নিত করা হয়, <strong>SMC</strong> দিয়ে institutional order block ও liquidity level বোঝা হয়, এবং <strong>Order Flow</strong> দিয়ে market-এর real buying/selling pressure confirm করা হয়।
+      </div>
+    </div>
+
+    <div class="grid-3">
+      <div class="mini-card">
+        <h4>🕯️ CRT — কী?</h4>
+        <p>প্রতিটি candle-এর High ও Low-এ liquidity trap থাকে। CRT সেই manipulation identify করে সঠিক direction বের করে।</p>
+      </div>
+      <div class="mini-card">
+        <h4>🏦 SMC — কী?</h4>
+        <p>Smart Money (Banks/Institutions) কোথায় orders রেখেছে সেটা বোঝার technique। Order Block, FVG, BOS/CHoCH এর মাধ্যমে।</p>
+      </div>
+      <div class="mini-card">
+        <h4>📈 Order Flow — কী?</h4>
+        <p>Market-এ কতটুকু buying vs selling pressure আছে তা দেখার পদ্ধতি। Delta, Imbalance এবং Volume Profile ব্যবহার করে।</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">⏰</span> Timeframe Setup</div>
+      <div class="card-subtitle">TOP-DOWN ANALYSIS APPROACH</div>
+      <table class="signal-table">
+        <thead>
+          <tr>
+            <th>Timeframe</th>
+            <th>উদ্দেশ্য</th>
+            <th>কী দেখবেন</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="tag tag-gold">Weekly</span></td>
+            <td>Major Trend</td>
+            <td>Major S/R, HTF Order Block, Liquidity Pool</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-gold">Daily</span></td>
+            <td>Bias নির্ধারণ</td>
+            <td>Displacement, Daily CRT Pattern, FVG</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-blue">4H</span></td>
+            <td>Setup খোঁজা</td>
+            <td>CRT Formation, Order Block, BOS/CHoCH</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-blue">1H</span></td>
+            <td>Entry Zone</td>
+            <td>Mitigation Block, Rejection Candle</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-purple">15M / 5M</span></td>
+            <td>Precision Entry</td>
+            <td>Order Flow Confirmation, FVG Fill, MSS</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">💱</span> Best Pairs & Sessions</div>
+      <div class="card-subtitle">RECOMMENDED INSTRUMENTS</div>
+      <div class="grid-2">
+        <div>
+          <p style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--dim);margin-bottom:12px;letter-spacing:1px;">MAJOR PAIRS</p>
+          <div class="tags">
+            <span class="tag tag-green">EUR/USD</span>
+            <span class="tag tag-green">GBP/USD</span>
+            <span class="tag tag-green">USD/JPY</span>
+            <span class="tag tag-green">USD/CHF</span>
+            <span class="tag tag-blue">GBP/JPY</span>
+            <span class="tag tag-blue">EUR/JPY</span>
+          </div>
+        </div>
+        <div>
+          <p style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--dim);margin-bottom:12px;letter-spacing:1px;">BEST SESSIONS</p>
+          <div class="tags">
+            <span class="tag tag-gold">London: 8AM-12PM GMT</span>
+            <span class="tag tag-gold">NY: 1PM-5PM GMT</span>
+            <span class="tag tag-purple">London-NY Overlap</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== PANEL 2: CRT ===== -->
+  <div id="crt" class="panel">
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🕯️</span> Candle Range Theory (CRT)</div>
+      <div class="card-subtitle">MANIPULATION · DISTRIBUTION · REVERSAL</div>
+
+      <div class="highlight">
+        <strong>CRT-এর মূল ধারণা:</strong> প্রতিটি candle-এর High ও Low হলো liquidity zone। Smart Money এই zones sweep করে retail traders-দের stop hunt করে, তারপর সত্যিকারের direction-এ move করে।
+      </div>
+
+      <div class="chart-container">
+        <div class="chart-label">CRT PATTERN VISUALIZATION</div>
+        <svg class="chart" viewBox="0 0 700 180">
+          <!-- Grid lines -->
+          <line x1="0" y1="40" x2="700" y2="40" stroke="#1a2d4a" stroke-width="1"/>
+          <line x1="0" y1="90" x2="700" y2="90" stroke="#1a2d4a" stroke-width="1"/>
+          <line x1="0" y1="140" x2="700" y2="140" stroke="#1a2d4a" stroke-width="1"/>
+
+          <!-- Labels -->
+          <text x="8" y="36" fill="#4a6080" font-size="10" font-family="IBM Plex Mono">HIGH (Liquidity)</text>
+          <text x="8" y="136" fill="#4a6080" font-size="10" font-family="IBM Plex Mono">LOW (Liquidity)</text>
+
+          <!-- Previous candles -->
+          <rect x="60" y="70" width="20" height="50" fill="rgba(0,200,150,0.3)" stroke="#00c896" stroke-width="1"/>
+          <line x1="70" y1="50" x2="70" y2="70" stroke="#00c896" stroke-width="1.5"/>
+          <line x1="70" y1="120" x2="70" y2="145" stroke="#00c896" stroke-width="1.5"/>
+
+          <rect x="100" y="65" width="20" height="55" fill="rgba(0,200,150,0.3)" stroke="#00c896" stroke-width="1"/>
+          <line x1="110" y1="48" x2="110" y2="65" stroke="#00c896" stroke-width="1.5"/>
+          <line x1="110" y1="120" x2="110" y2="148" stroke="#00c896" stroke-width="1.5"/>
+
+          <!-- CRT Candle - sweep high (manipulation) -->
+          <rect x="160" y="55" width="24" height="80" fill="rgba(255,77,106,0.25)" stroke="#ff4d6a" stroke-width="1.5" rx="1"/>
+          <line x1="172" y1="32" x2="172" y2="55" stroke="#ff4d6a" stroke-width="2"/>
+          <line x1="172" y1="135" x2="172" y2="160" stroke="#ff4d6a" stroke-width="2"/>
+          <!-- Sweep annotation -->
+          <text x="200" y="28" fill="#ff4d6a" font-size="10" font-family="IBM Plex Mono">SWEEP HIGH</text>
+          <line x1="200" y1="32" x2="185" y2="32" stroke="#ff4d6a" stroke-width="1" stroke-dasharray="3,2"/>
+          <circle cx="172" cy="32" r="4" fill="none" stroke="#ff4d6a" stroke-width="1.5"/>
+
+          <!-- Rejection / MSS -->
+          <rect x="210" y="100" width="22" height="55" fill="rgba(255,77,106,0.3)" stroke="#ff4d6a" stroke-width="1.5" rx="1"/>
+          <line x1="221" y1="80" x2="221" y2="100" stroke="#ff4d6a" stroke-width="1.5"/>
+          <line x1="221" y1="155" x2="221" y2="168" stroke="#ff4d6a" stroke-width="1.5"/>
+
+          <!-- MSS Arrow -->
+          <text x="250" y="88" fill="#a259ff" font-size="10" font-family="IBM Plex Mono">MSS / CHoCH</text>
+          <line x1="247" y1="90" x2="235" y2="95" stroke="#a259ff" stroke-width="1" stroke-dasharray="3,2"/>
+
+          <!-- Order Block -->
+          <rect x="260" y="95" width="60" height="25" fill="rgba(162,89,255,0.1)" stroke="#a259ff" stroke-width="1" stroke-dasharray="4,2"/>
+          <text x="263" y="108" fill="#a259ff" font-size="9" font-family="IBM Plex Mono">ORDER BLOCK</text>
+
+          <!-- Entry candles (bearish) -->
+          <rect x="340" y="108" width="20" height="45" fill="rgba(255,77,106,0.4)" stroke="#ff4d6a" stroke-width="1.5" rx="1"/>
+          <line x1="350" y1="95" x2="350" y2="108" stroke="#ff4d6a" stroke-width="1.5"/>
+          <line x1="350" y1="153" x2="350" y2="163" stroke="#ff4d6a" stroke-width="1.5"/>
+
+          <rect x="370" y="120" width="20" height="50" fill="rgba(255,77,106,0.4)" stroke="#ff4d6a" stroke-width="1.5" rx="1"/>
+          <line x1="380" y1="108" x2="380" y2="120" stroke="#ff4d6a" stroke-width="1.5"/>
+          <line x1="380" y1="170" x2="380" y2="178" stroke="#ff4d6a" stroke-width="1.5"/>
+
+          <!-- Entry arrow -->
+          <text x="420" y="108" fill="#00e5ff" font-size="10" font-family="IBM Plex Mono" font-weight="bold">▼ SELL ENTRY</text>
+
+          <!-- TP target -->
+          <line x1="440" y1="140" x2="660" y2="140" stroke="rgba(0,200,150,0.4)" stroke-width="1" stroke-dasharray="5,3"/>
+          <text x="560" y="136" fill="#00c896" font-size="10" font-family="IBM Plex Mono">TP ZONE</text>
+        </svg>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">01</div>
+          <div class="step-content">
+            <h4>Dealing Range চিহ্নিত করুন</h4>
+            <p>আগের significant High ও Low mark করুন। এই range-এর মধ্যে price কীভাবে behave করছে সেটা observe করুন। এই High/Low-ই হলো CRT-এর boundary।</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">02</div>
+          <div class="step-content">
+            <h4>Liquidity Sweep দেখুন</h4>
+            <p>Price যখন range-এর High বা Low sweep করে (wick দিয়ে cross করে ফিরে আসে), সেটাই CRT-এর প্রথম signal। এটা retail traders-দের stop hunt।</p>
+            <div class="tags">
+              <span class="tag tag-red">BSL Sweep (Bearish)</span>
+              <span class="tag tag-green">SSL Sweep (Bullish)</span>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">03</div>
+          <div class="step-content">
+            <h4>CRT Candle Close কনফার্ম করুন</h4>
+            <p>Sweep candle-টি যদি range-এর ভেতরে close করে, তাহলে সেটা valid CRT। Close-এর position দেখুন — range-এর opposite side-এ close মানে strong reversal signal।</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">04</div>
+          <div class="step-content">
+            <h4>Market Structure Shift (MSS)</h4>
+            <p>Sweep-এর পরে যখন price previous swing point break করে opposite direction-এ, সেটা MSS। এটাই CRT completion এবং entry-র confirmation।</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📋</span> CRT Pattern Types</div>
+      <div class="card-subtitle">তিন ধরনের CRT Setup</div>
+      <div class="grid-3">
+        <div class="mini-card">
+          <h4 style="color:var(--red)">🔴 Bearish CRT</h4>
+          <p>Price HTF High-এর উপরে যায় (BSL Sweep), তারপর reject হয়ে নিচে নামে। Previous low break হলে entry নিন।</p>
+        </div>
+        <div class="mini-card">
+          <h4 style="color:var(--green)">🟢 Bullish CRT</h4>
+          <p>Price HTF Low-এর নিচে যায় (SSL Sweep), তারপর reject হয়ে উপরে যায়। Previous high break হলে entry নিন।</p>
+        </div>
+        <div class="mini-card">
+          <h4 style="color:var(--gold)">🟡 Nested CRT</h4>
+          <p>LTF-এ CRT pattern HTF Order Block বা FVG-এর মধ্যে তৈরি হয়। সবচেয়ে শক্তিশালী setup।</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== PANEL 3: SMC ===== -->
+  <div id="smc" class="panel">
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🏦</span> Smart Money Concepts (SMC)</div>
+      <div class="card-subtitle">INSTITUTIONAL TRADING LOGIC</div>
+
+      <div class="highlight hl-purple">
+        <strong>SMC-এর মূল ধারণা:</strong> Retail traders price follow করে, কিন্তু Smart Money (Central Banks, Hedge Funds) নিজেরাই price manipulate করে। তাদের footprint চিহ্নিত করাই SMC-র লক্ষ্য।
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">🔷</div>
+          <div class="step-content">
+            <h4>Order Block (OB)</h4>
+            <p>যে candle-এর পরে একটি strong displacement হয়, সেই candle-ই Order Block। এখানে institutional orders থাকে। Price যখন OB-তে ফিরে আসে, সেটাই entry zone।</p>
+            <div class="tags">
+              <span class="tag tag-blue">Bullish OB: Last Bearish candle before up move</span>
+              <span class="tag tag-red">Bearish OB: Last Bullish candle before down move</span>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">🔶</div>
+          <div class="step-content">
+            <h4>Fair Value Gap (FVG) / Imbalance</h4>
+            <p>তিনটি candle-এর মধ্যে যখন gap তৈরি হয় (candle 1-এর wick ও candle 3-এর wick overlap করে না), সেটাই FVG। Price সাধারণত এই gap fill করতে আসে।</p>
+            <div class="tags">
+              <span class="tag tag-green">Bullish FVG</span>
+              <span class="tag tag-red">Bearish FVG</span>
+              <span class="tag tag-gold">Premium vs Discount Zone</span>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">🔺</div>
+          <div class="step-content">
+            <h4>BOS vs CHoCH</h4>
+            <p><strong>BOS (Break of Structure):</strong> Trend continuation signal। <strong>CHoCH (Change of Character):</strong> Trend reversal signal। CHoCH হলে bias পরিবর্তন করুন।</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">💧</div>
+          <div class="step-content">
+            <h4>Liquidity Levels</h4>
+            <p>Equal Highs/Lows, Previous Day/Week High-Low, Round Numbers — এগুলো সব liquidity zone। Smart Money এখান থেকে orders নেয় এবং এখানে stop hunt করে।</p>
+            <div class="tags">
+              <span class="tag tag-blue">Buy Side Liquidity (BSL)</span>
+              <span class="tag tag-red">Sell Side Liquidity (SSL)</span>
+              <span class="tag tag-gold">Inducement Level</span>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">📍</div>
+          <div class="step-content">
+            <h4>Premium vs Discount Zone</h4>
+            <p>Range-এর 50% (Equilibrium) চিহ্নিত করুন। উপরের 50% = Premium (Sell zone), নিচের 50% = Discount (Buy zone)। সবসময় Discount-এ buy এবং Premium-এ sell করুন।</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🗓️</span> Power of 3 (PO3) — Daily Setup</div>
+      <div class="card-subtitle">ACCUMULATION · MANIPULATION · DISTRIBUTION</div>
+      <div class="grid-3">
+        <div class="mini-card" style="border-color:rgba(162,89,255,0.3)">
+          <h4 style="color:var(--purple)">Phase 1: Accumulation</h4>
+          <p>Asian Session (রাত ১০টা - ভোর ৬টা GMT+6)। Price sideways। Smart Money orders collect করছে।</p>
+        </div>
+        <div class="mini-card" style="border-color:rgba(0,229,255,0.3)">
+          <h4 style="color:var(--accent)">Phase 2: Manipulation</h4>
+          <p>London Open। Asian range-এর opposite দিকে fake move। Retail traders-দের trap করা হয়।</p>
+        </div>
+        <div class="mini-card" style="border-color:rgba(0,200,150,0.3)">
+          <h4 style="color:var(--green)">Phase 3: Distribution</h4>
+          <p>NY Session। Real direction-এ strong move। এখানেই profit নিতে হবে।</p>
+        </div>
+      </div>
+      <div class="highlight" style="margin-top:16px">
+        <strong>Daily Bias:</strong> প্রতিদিন London Open-এ Asian range sweep হয় কোন দিকে সেটা দেখুন। Sweep-এর opposite direction-ই হবে আপনার দিনের main trade direction।
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== PANEL 4: ORDER FLOW ===== -->
+  <div id="orderflow" class="panel">
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📈</span> Order Flow Analysis</div>
+      <div class="card-subtitle">REAL MARKET PRESSURE CONFIRMATION</div>
+
+      <div class="highlight hl-blue">
+        <strong>Order Flow কেন দরকার?</strong> CRT ও SMC setup তৈরি হলেই trade নেওয়া ঠিক না। Order Flow confirm করে যে market সত্যিই সেই direction-এ যেতে চাইছে কিনা।
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">01</div>
+          <div class="step-content">
+            <h4>Displacement / Impulse Move</h4>
+            <p>Strong, fast, one-directional move যেটা FVG বা Order Block তৈরি করে। এটা institutional participation-এর প্রমাণ। Displacement ছাড়া কোনো Order Block valid না।</p>
+            <div class="tags">
+              <span class="tag tag-green">✓ Strong close</span>
+              <span class="tag tag-green">✓ Large body</span>
+              <span class="tag tag-green">✓ Small wick</span>
+              <span class="tag tag-red">✗ Gradual move</span>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">02</div>
+          <div class="step-content">
+            <h4>Mitigation / Retracement</h4>
+            <p>Displacement-এর পরে price আবার OB বা FVG-তে ফিরে আসে orders mitigate করতে। এই retracement-এর সময় volume কমে যাওয়া উচিত — এটা healthy pullback-এর sign।</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">03</div>
+          <div class="step-content">
+            <h4>Rejection Confirmation</h4>
+            <p>OB বা FVG zone-এ price আসার পর rejection candle দেখুন। Long wick, small body, opposite direction-এর close — এটা order flow confirmation। এখানেই entry নিন।</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">04</div>
+          <div class="step-content">
+            <h4>Volume Confirmation (যদি পাওয়া যায়)</h4>
+            <p>Forex-এ exact volume পাওয়া কঠিন, কিন্তু tick volume ব্যবহার করুন। Entry zone-এ volume spike + price rejection = strongest signal।</p>
+            <div class="tags">
+              <span class="tag tag-green">High Volume + Rejection = Strong</span>
+              <span class="tag tag-gold">Low Volume + Rejection = Moderate</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📊</span> Confluence Score System</div>
+      <div class="card-subtitle">যত বেশি confluence, তত শক্তিশালী trade</div>
+
+      <div id="confluence-bars">
+        <div class="indicator-bar">
+          <div class="indicator-name">HTF Trend Alignment</div>
+          <div class="bar-track"><div class="bar-fill" style="width:0%;background:linear-gradient(90deg,#00e5ff,#00c896)" data-width="90%"></div></div>
+          <div class="bar-value">90%</div>
+        </div>
+        <div class="indicator-bar">
+          <div class="indicator-name">CRT Pattern Valid</div>
+          <div class="bar-track"><div class="bar-fill" style="width:0%;background:linear-gradient(90deg,#a259ff,#00e5ff)" data-width="85%"></div></div>
+          <div class="bar-value">85%</div>
+        </div>
+        <div class="indicator-bar">
+          <div class="indicator-name">SMC Order Block</div>
+          <div class="bar-track"><div class="bar-fill" style="width:0%;background:linear-gradient(90deg,#f0b429,#a259ff)" data-width="80%"></div></div>
+          <div class="bar-value">80%</div>
+        </div>
+        <div class="indicator-bar">
+          <div class="indicator-name">Liquidity Swept</div>
+          <div class="bar-track"><div class="bar-fill" style="width:0%;background:linear-gradient(90deg,#00e5ff,#f0b429)" data-width="95%"></div></div>
+          <div class="bar-value">95%</div>
+        </div>
+        <div class="indicator-bar">
+          <div class="indicator-name">Order Flow Confirm</div>
+          <div class="bar-track"><div class="bar-fill" style="width:0%;background:linear-gradient(90deg,#00c896,#00e5ff)" data-width="75%"></div></div>
+          <div class="bar-value">75%</div>
+        </div>
+        <div class="indicator-bar">
+          <div class="indicator-name">Session Timing</div>
+          <div class="bar-track"><div class="bar-fill" style="width:0%;background:linear-gradient(90deg,#ff4d6a,#f0b429)" data-width="70%"></div></div>
+          <div class="bar-value">70%</div>
+        </div>
+      </div>
+
+      <div class="highlight" style="margin-top:16px">
+        <strong>নিয়ম:</strong> কমপক্ষে ৪টি confluence confirm হলে trade নিন। সবগুলো একসাথে হলে সেটা A+ Setup।
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== PANEL 5: ENTRY RULES ===== -->
+  <div id="entry" class="panel">
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🎯</span> Complete Entry Framework</div>
+      <div class="card-subtitle">STEP-BY-STEP EXECUTION GUIDE</div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">S1</div>
+          <div class="step-content">
+            <h4>Weekly/Daily Bias নির্ধারণ</h4>
+            <p>Weekly chart-এ trend কোন দিকে? Daily-তে BOS হয়েছে কোন দিকে? এই দুটো একমত হলে সেই direction-ই আপনার bias। Bias-এর বিপরীতে কখনো trade করবেন না।</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">S2</div>
+          <div class="step-content">
+            <h4>4H-এ CRT Setup খুঁজুন</h4>
+            <p>4H chart-এ পুরনো High বা Low-এর কাছে price আছে কিনা দেখুন। CRT setup তৈরি হচ্ছে কিনা অপেক্ষা করুন — wick দিয়ে level sweep করছে কিনা।</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">S3</div>
+          <div class="step-content">
+            <h4>1H-এ SMC Confirm</h4>
+            <p>4H-এর CRT zone-এ 1H-এ Order Block আছে কিনা দেখুন। FVG আছে কিনা? CHoCH/BOS হয়েছে কিনা? কমপক্ষে ২টি SMC factor থাকতে হবে।</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">S4</div>
+          <div class="step-content">
+            <h4>15M/5M-এ Order Flow Entry</h4>
+            <p>Entry zone-এ price আসার পর 15M বা 5M-এ rejection candle দেখুন। Strong displacement candle দেখুন। MSS হলে entry নিন।</p>
+            <div class="tags">
+              <span class="tag tag-green">BUY: SSL swept + Bullish OB + Bullish displacement</span>
+              <span class="tag tag-red">SELL: BSL swept + Bearish OB + Bearish displacement</span>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">S5</div>
+          <div class="step-content">
+            <h4>SL, TP এবং Risk Management</h4>
+            <p><strong>Stop Loss:</strong> Order Block-এর নিচে/উপরে (বা Sweep candle-এর extreme)। <strong>TP1:</strong> Nearest liquidity। <strong>TP2:</strong> HTF target। <strong>RR Ratio:</strong> সর্বনিম্ন 1:2, আদর্শ 1:3 বা তার বেশি।</p>
+            <div class="tags">
+              <span class="tag tag-red">Risk per trade: max 1-2%</span>
+              <span class="tag tag-gold">Min RR: 1:2</span>
+              <span class="tag tag-blue">Ideal RR: 1:3+</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🚫</span> Avoid করুন — Invalid Setup Signs</div>
+      <div class="card-subtitle">এই signs দেখলে trade নেবেন না</div>
+      <div class="risk-box">
+        <h4>⛔ RED FLAGS</h4>
+        <ul class="rule-list">
+          <li>HTF trend-এর বিপরীতে trade নেওয়া</li>
+          <li>Liquidity sweep ছাড়া সরাসরি Order Block-এ entry</li>
+          <li>News event-এর ঠিক আগে trade নেওয়া (FOMC, NFP, CPI)</li>
+          <li>Asian session-এ major pair-এ trade (movement কম)</li>
+          <li>Confluence ৩-এর কম হলে trade নেওয়া</li>
+          <li>RR 1:1.5-এর নিচে কোনো trade নেওয়া</li>
+          <li>একদিনে ২টির বেশি loss হলে আর trade না করা</li>
+          <li>Emotional trade — loss recover করতে বড় lot নেওয়া</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">💰</span> Risk Management Rules</div>
+      <div class="card-subtitle">CAPITAL PRESERVATION FIRST</div>
+      <div class="grid-2">
+        <div class="mini-card" style="border-color:rgba(0,200,150,0.3)">
+          <h4 style="color:var(--green)">Position Sizing</h4>
+          <p>Account-এর মাত্র <strong style="color:var(--gold)">1-2%</strong> risk করুন প্রতিটি trade-এ। $1000 account হলে max $20 risk।</p>
+        </div>
+        <div class="mini-card" style="border-color:rgba(240,180,41,0.3)">
+          <h4 style="color:var(--gold)">Daily Loss Limit</h4>
+          <p>দিনে account-এর সর্বোচ্চ <strong style="color:var(--red)">5%</strong> হারালে ওই দিনের trading বন্ধ করুন।</p>
+        </div>
+        <div class="mini-card" style="border-color:rgba(0,229,255,0.3)">
+          <h4 style="color:var(--accent)">BE Management</h4>
+          <p>1R profit হলে SL Break Even-এ নিয়ে আসুন। Risk-free trade চালিয়ে যান।</p>
+        </div>
+        <div class="mini-card" style="border-color:rgba(162,89,255,0.3)">
+          <h4 style="color:var(--purple)">Partial Profit</h4>
+          <p>TP1-এ ৫০% close করুন, বাকি ৫০% TP2-র জন্য রাখুন। Trailing SL ব্যবহার করুন।</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== PANEL 6: CHECKLIST ===== -->
+  <div id="checklist" class="panel">
+
+    <div class="card">
+      <div class="card-title"><span class="icon">✅</span> Pre-Trade Checklist</div>
+      <div class="card-subtitle">প্রতিটি trade-এর আগে এই checklist সম্পন্ন করুন</div>
+
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-text" id="progressText">0 / 12 completed</div>
+
+      <br>
+
+      <div class="checklist" id="checklist">
+        <div class="check-item" onclick="toggleCheck(this)">
+          <div class="check-box">✓</div>
+          <div class="check-text">📅 <strong>HTF Bias নির্ধারিত</strong> — Weekly ও Daily trend একমত</div>
+        </div>
+        <div class="check-item" onclick="toggleCheck(this)">
+          <div class="check-box">✓</div>
+          <div class="check-text">🔵 <strong>4H CRT Pattern</strong> — Valid liquidity sweep দেখা গেছে</div>
+        </div>
+        <div class="check-item" onclick="toggleCheck(this)">
+          <div class="check-box">✓</div>
+          <div class="check-text">🏦 <strong>SMC Order Block</strong> — Entry zone-এ valid OB আছে</div>
+        </div>
+        <div class="check-item" onclick="toggleCheck(this)">
+          <div class="check-box">✓</div>
+          <div class="check-text">⚡ <strong>Displacement আছে</strong> — Strong impulse move দেখা গেছে</div>
+        </div>
+        <div class="check-item" onclick="toggleCheck(this)">
+          <div class="check-box">✓</div>
+          <div class="check-text">💧 <strong>Liquidity Swept</strong> — BSL বা SSL clear হয়েছে</div>
+        </div>
+        <div class="check-item" onclick="toggleCheck(this)">
+          <div class="check-box">✓</div>
+          <div class="check-text">🔄 <strong>CHoCH/MSS</strong> — Structure shift confirm হয়েছে</div>
+        </div>
+        <div class="check-item" onclick="toggleCheck(this)">
+          <div class="check-box">✓</div>
+          <div class="check-text">📈 <strong>Order Flow Confirm</strong> — Entry zone-এ rejection candle দেখা গেছে</div>
+        </div>
+        <div class="check-item" onclick="toggleCheck(this)">
+          <div class="check-box">✓</div>
+          <div class="check-text">🎯 <strong>FVG/Premium-Discount</strong> — Price discount/premium zone-এ আছে</div>
+        </div>
+        <div class="check-item" onclick="toggleCheck(this)">
+          <div class="check-box">✓</div>
+          <div class="check-text">⏰ <strong>Session Timing</strong> — London বা NY session-এ আছি</div>
+        </div>
+        <div class="check-item" onclick="toggleCheck(this)">
+          <div class="check-box">✓</div>
+          <div class="check-text">📰 <strong>News Check</strong> — পরবর্তী ১ ঘণ্টায় কোনো major news নেই</div>
+        </div>
+        <div class="check-item" onclick="toggleCheck(this)">
+          <div class="check-box">✓</div>
+          <div class="check-text">📊 <strong>RR Minimum 1:2</strong> — SL ও TP calculate করা হয়েছে</div>
+        </div>
+        <div class="check-item" onclick="toggleCheck(this)">
+          <div class="check-box">✓</div>
+          <div class="check-text">💵 <strong>Risk 1-2%</strong> — Lot size সঠিকভাবে calculate করা হয়েছে</div>
+        </div>
+      </div>
+
+      <div id="readyMsg" style="display:none;margin-top:20px" class="highlight" style="text-align:center">
+        🚀 <strong>সব checklist complete!</strong> আপনি trade নিতে প্রস্তুত। Good luck!
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📝</span> Trade Journal Template</div>
+      <div class="card-subtitle">প্রতিটি trade record করুন</div>
+      <table class="signal-table">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>কী লিখবেন</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="tag tag-blue">Date/Time</span></td>
+            <td>Trade নেওয়ার exact date ও session</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-blue">Pair</span></td>
+            <td>কোন currency pair</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-gold">Setup</span></td>
+            <td>CRT/SMC setup কী ছিল (screenshot নিন)</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-gold">Confluences</span></td>
+            <td>কী কী confluence ছিল (list করুন)</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-green">Entry/SL/TP</span></td>
+            <td>Exact price levels</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-purple">Result</span></td>
+            <td>Win/Loss, R gained/lost</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-red">Mistake</span></td>
+            <td>কোনো ভুল হলে কী ভুল হয়েছিল</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+  // Tab switching
+  function showTab(id) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    event.target.classList.add('active');
+
+    // Animate bars when order flow tab shown
+    if (id === 'orderflow') {
+      setTimeout(animateBars, 200);
+    }
+  }
+
+  // Animate confluence bars
+  function animateBars() {
+    document.querySelectorAll('.bar-fill').forEach(bar => {
+      bar.style.width = bar.dataset.width;
+    });
+  }
+
+  // Animate bars on load if visible
+  setTimeout(animateBars, 500);
+
+  // Checklist
+  function toggleCheck(el) {
+    el.classList.toggle('checked');
+    updateProgress();
+  }
+
+  function updateProgress() {
+    const items = document.querySelectorAll('.check-item');
+    const checked = document.querySelectorAll('.check-item.checked').length;
+    const pct = Math.round((checked / items.length) * 100);
+
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressText').textContent = `${checked} / ${items.length} completed (${pct}%)`;
+
+    const msg = document.getElementById('readyMsg');
+    if (checked === items.length) {
+      msg.style.display = 'block';
+    } else {
+      msg.style.display = 'none';
+    }
+  }
+</script>
+
+</body>
+</html>
